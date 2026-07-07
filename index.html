@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚽ 世界杯竞猜池</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ========== Reset & Vars ========== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1923;--surface:#1a2d3d;--border:#2a4055;
+  --gold:#d4a843;--green:#2ecc71;--red:#e74c3c;--blue:#3498db;
+  --text:#e0e6ec;--text2:#8899aa;--radius:12px;
+  font-size:15px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5}
+
+/* ========== Layout ========== */
+.app{max-width:680px;margin:0 auto;padding:16px}
+.hidden{display:none!important}
+
+/* ========== Header ========== */
+.header{text-align:center;padding:20px 0;border-bottom:2px solid var(--gold);margin-bottom:20px}
+.header h1{font-size:1.6rem;color:var(--gold);letter-spacing:2px}
+.header .sub{color:var(--text2);font-size:.85rem;margin-top:4px}
+
+/* ========== Tabs ========== */
+.tabs{display:flex;gap:0;margin-bottom:20px;background:var(--surface);border-radius:var(--radius);overflow:hidden}
+.tab-btn{flex:1;padding:12px;border:none;background:transparent;color:var(--text2);font-size:.9rem;cursor:pointer;transition:.2s;border-bottom:3px solid transparent}
+.tab-btn.active{color:var(--gold);border-bottom-color:var(--gold);background:rgba(212,168,67,.08)}
+.tab-btn:hover{color:var(--text)}
+
+/* ========== Cards ========== */
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:12px;border:1px solid var(--border)}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.match-teams{font-size:1.2rem;font-weight:700}
+.match-teams .vs{color:var(--gold);margin:0 8px}
+.match-time{color:var(--text2);font-size:.8rem}
+.deadline{font-size:.75rem;padding:4px 8px;border-radius:6px;font-weight:600}
+.deadline.open{background:rgba(46,204,113,.15);color:var(--green)}
+.deadline.closed{background:rgba(231,76,60,.15);color:var(--red)}
+
+.pool-section{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.pool-label{font-weight:700;color:var(--gold);font-size:.9rem;margin-bottom:8px}
+.pool-odds{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.odd-item{background:rgba(212,168,67,.1);padding:6px 12px;border-radius:8px;font-size:.8rem}
+.odd-item .val{color:var(--gold);font-weight:700}
+
+.bet-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bet-form input,.bet-form select,.bet-form button{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.85rem}
+.bet-form input:focus{outline:none;border-color:var(--gold)}
+.score-input{width:52px;text-align:center}
+.amount-input{width:80px}
+.name-input{width:100px}
+.pwd-input{width:110px}
+
+.btn{padding:8px 20px;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;transition:.2s}
+.btn-gold{background:var(--gold);color:#1a1a1a}
+.btn-gold:hover{filter:brightness(1.1)}
+.btn-outline{background:transparent;border:2px solid var(--blue);color:var(--blue)}
+.btn-outline:hover{background:rgba(52,152,219,.1)}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+.btn-danger{background:var(--red);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+.my-bet-tag{display:inline-block;background:rgba(52,152,219,.15);color:var(--blue);padding:3px 10px;border-radius:6px;font-size:.78rem;margin-top:6px}
+
+/* ========== Login ========== */
+.login-screen{max-width:400px;margin:60px auto;text-align:center}
+.login-screen h2{color:var(--gold);margin-bottom:6px}
+.login-screen .sub{color:var(--text2);margin-bottom:24px;font-size:.9rem}
+.login-screen input{width:100%;padding:12px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface);color:var(--text);font-size:1rem;text-align:center;letter-spacing:4px}
+.login-screen input:focus{outline:none;border-color:var(--gold)}
+.login-screen .btn{margin-top:12px;width:100%;padding:12px;font-size:1rem}
+.login-error{color:var(--red);margin-top:8px;font-size:.85rem}
+
+/* ========== Admin ========== */
+.admin-section{margin-bottom:24px}
+.admin-section h3{color:var(--gold);margin-bottom:12px;font-size:1rem}
+.admin-form{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.admin-form label{font-size:.8rem;color:var(--text2);display:block}
+.admin-form input,.admin-form select{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.85rem}
+.admin-form input:focus{outline:none;border-color:var(--gold)}
+.result-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0}
+.result-row .vs{color:var(--text2);margin:0 4px}
+.settle-summary{font-size:.85rem;margin-top:8px}
+.settle-summary .win{color:var(--green)}
+.settle-summary .refund{color:var(--gold)}
+.settle-summary .lose{color:var(--red)}
+
+.bets-table{width:100%;font-size:.8rem;border-collapse:collapse}
+.bets-table th,.bets-table td{padding:8px;text-align:left;border-bottom:1px solid var(--border)}
+.bets-table th{color:var(--text2);font-weight:600}
+
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:10px 24px;border-radius:8px;font-weight:600;z-index:999;animation:fadeIn .3s}
+.toast.ok{background:var(--green);color:#fff}
+.toast.err{background:var(--red);color:#fff}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1}}
+
+.result-pick{display:flex;gap:6px}
+.result-pick button{padding:8px 16px;border-radius:8px;border:2px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:.85rem;transition:.2s}
+.result-pick button:hover{border-color:var(--blue)}
+.result-pick button.sel{border-color:var(--gold);background:rgba(212,168,67,.15);color:var(--gold)}
+
+.logout-btn{position:absolute;top:16px;right:16px;background:transparent;border:1px solid var(--border);color:var(--text2);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.8rem}
+.logout-btn:hover{color:var(--text)}
+
+/* Auth bar */
+.auth-bar{background:var(--surface);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;border:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.auth-bar .user-info{font-weight:700;color:var(--gold)}
+.auth-bar input{padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.82rem;width:90px}
+.auth-bar input:focus{outline:none;border-color:var(--gold)}
+.auth-bar .btn-sm{padding:5px 12px;font-size:.78rem}
+.auth-status{font-size:.78rem;color:var(--text2)}
+.auth-status.ready{color:var(--green)}
+.instruction-card{background:var(--surface);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;border:1px solid var(--border);font-size:.82rem;color:var(--text2);line-height:1.7}
+.instruction-card b{color:var(--gold)}
+.instruction-card .rules{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.instruction-card .rules span{padding:2px 8px;background:rgba(212,168,67,.08);border-radius:4px;font-size:.78rem;white-space:nowrap}
+
+/* ========== Responsive ========== */
+@media(max-width:480px){
+  .app{padding:10px}
+  .header h1{font-size:1.3rem}
+  .match-teams{font-size:1rem}
+  .bet-form{flex-direction:column;align-items:stretch}
+  .bet-form input{width:100%!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="loginScreen" class="login-screen">
+  <div style="font-size:3rem;margin-bottom:8px">⚽</div>
+  <h2>世界杯竞猜池</h2>
+  <p class="sub">请输入房间密码进入</p>
+  <input type="password" id="roomPassword" placeholder="房间密码" onkeydown="if(event.key==='Enter')login()">
+  <button class="btn btn-gold" onclick="login()">进入</button>
+  <p id="loginError" class="login-error"></p>
+</div>
+
+<!-- ==================== MAIN APP ==================== -->
+<div id="mainApp" class="app hidden">
+  <div style="position:relative">
+    <div class="header">
+      <h1>⚽ 世界杯竞猜池</h1>
+      <div class="sub" id="headerSub"></div>
+    </div>
+    <button class="logout-btn" onclick="logout()">退出</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('matches')">🏆 比赛</button>
+    <button class="tab-btn" onclick="switchTab('myBets')">📋 我的投注</button>
+    <button class="tab-btn" id="adminTabBtn" onclick="switchTab('admin')">⚙️ 管理</button>
+  </div>
+
+  <!-- Auth Bar -->
+  <div id="authBar" class="auth-bar">
+    <span class="auth-status" id="authStatus">👤 请先注册或登录投注身份</span>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input id="authName" placeholder="姓名">
+      <input id="authPwd" type="password" placeholder="投注密码">
+      <input id="authPwd2" type="password" placeholder="确认密码" style="display:none">
+      <button class="btn btn-gold btn-sm" id="authBtn" onclick="registerBetter()">注册</button>
+      <button class="btn btn-outline btn-sm" id="authSwitchBtn" onclick="toggleAuthMode()">已有账号</button>
+      <button class="btn btn-sm" id="authLogoutBtn" onclick="logoutBetter()" style="display:none;border:1px solid var(--red);color:var(--red);background:transparent">退出</button>
+    </div>
+  </div>
+
+  <!-- Instruction -->
+  <div id="instructionCard" class="instruction-card">
+    <b>📋 竞猜说明</b>
+    <div style="margin-top:6px">每场比赛设有两个<b>独立竞猜池</b>，每个池子单独计算赔率和结算：</div>
+    <div class="rules">
+      <span>🎯 <b>比分池</b>：猜90分钟比分</span>
+      <span>🏆 <b>胜负池</b>：猜晋级队伍</span>
+      <span>💰 每注 ¥50-200</span>
+      <span>⏰ 赛前3小时截止</span>
+      <span>🔒 只能看自己投注</span>
+      <span>↩️ 无人猜对/无对手盘→退款</span>
+    </div>
+    <div style="margin-top:6px;font-size:.75rem">⚠ 首次使用请<u>先注册</u>：填写姓名+密码+确认密码 → 点注册。注册后切换到登录模式投注。所有资金线下结算。</div>
+  </div>
+
+  <!-- Matches Tab -->
+  <div id="tabMatches"></div>
+
+  <!-- My Bets Tab -->
+  <div id="tabMyBets" class="hidden">
+    <div id="myBetsLoginCard" class="card">
+      <p style="color:var(--text2);margin-bottom:8px">输入姓名和投注密码查看你的投注记录</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="myBetsName" class="name-input" placeholder="姓名" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.85rem">
+        <input id="myBetsPwd" type="password" class="pwd-input" placeholder="投注密码" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.85rem">
+        <button class="btn btn-gold btn-sm" onclick="loadMyBets()">查看</button>
+      </div>
+    </div>
+    <div id="myBetsContent"></div>
+  </div>
+
+  <!-- Admin Tab -->
+  <div id="tabAdmin" class="hidden">
+    <div id="adminContent">
+      <div class="card">
+        <p style="color:var(--text2);margin-bottom:8px">输入管理员密码</p>
+        <div style="display:flex;gap:8px">
+          <input id="adminPwd" type="password" placeholder="管理员密码" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.85rem;flex:1;max-width:200px">
+          <button class="btn btn-gold btn-sm" onclick="adminLogin()">验证</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCRIPTS ==================== -->
+<script>
+// ========== CONFIG ==========
+const SUPABASE_URL = 'https://oxxsodecbwjigezqlohd.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94eHNvZGVjYndqaWdlenFsb2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzODc4MjMsImV4cCI6MjA5ODk2MzgyM30.gCNZ0iaDC9EUgSjT5vdwC3O20nur8spBjUOH7dhDNUg';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ========== STATE ==========
+let adminVerified = false;
+let currentBetter = { name: null, passwordHash: null }; // for convenience
+
+// ========== UTILS ==========
+async function sha256(msg) {
+  const enc = new TextEncoder().encode(msg);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+
+function deadlineTime(matchTime) {
+  const d = new Date(matchTime);
+  d.setHours(d.getHours() - 3);
+  return d;
+}
+
+function isOpen(matchTime) {
+  return new Date() < deadlineTime(matchTime);
+}
+
+function toast(msg, type='ok') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+// ========== AUTH ==========
+async function login() {
+  const pw = document.getElementById('roomPassword').value;
+  if (!pw) return;
+  const hash = await sha256(pw);
+  const { data, error } = await db.from('room_settings').select('value').eq('key','room_password_hash').single();
+  if (error || !data) { document.getElementById('loginError').textContent = '验证失败，请重试'; return; }
+  if (hash !== data.value) { document.getElementById('loginError').textContent = '房间密码错误'; return; }
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  document.getElementById('headerSub').textContent = '淘汰赛竞猜 · 每池 ¥50-200 · 赛前3小时截止';
+  await refreshMatches();
+}
+
+function logout() {
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('roomPassword').value = '';
+  adminVerified = false;
+  currentBetter = { name: null, passwordHash: null };
+  document.getElementById('adminTabBtn').style.display = '';
+  document.getElementById('tabAdmin').classList.add('hidden');
+  document.getElementById('tabMyBets').classList.add('hidden');
+  document.getElementById('tabMatches').classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+}
+
+// ========== BETTER AUTH ==========
+let authMode = 'register'; // 'register' or 'login'
+
+function toggleAuthMode() {
+  authMode = authMode === 'register' ? 'login' : 'register';
+  const btn = document.getElementById('authBtn');
+  const switchBtn = document.getElementById('authSwitchBtn');
+  const pwd2 = document.getElementById('authPwd2');
+  if (authMode === 'register') {
+    btn.textContent = '注册';
+    switchBtn.textContent = '已有账号';
+    pwd2.style.display = '';
+  } else {
+    btn.textContent = '登录';
+    switchBtn.textContent = '我要注册';
+    pwd2.style.display = 'none';
+  }
+}
+
+async function registerBetter() {
+  if (authMode !== 'register') { await loginBetter(); return; }
+  const name = document.getElementById('authName').value.trim();
+  const pwd = document.getElementById('authPwd').value.trim();
+  const pwd2 = document.getElementById('authPwd2').value.trim();
+  if (!name || !pwd) { toast('请填写姓名和密码','err'); return; }
+  if (pwd !== pwd2) { toast('两次密码不一致','err'); return; }
+  if (pwd.length < 3) { toast('密码至少3位','err'); return; }
+
+  const hash = await sha256(pwd);
+  // Check if name exists
+  const { data: exist } = await db.from('betters').select('name').eq('name', name).single();
+  if (exist) { toast('该姓名已被注册，请换一个或切换到登录','err'); return; }
+
+  const { error } = await db.from('betters').insert({ name, password_hash: hash });
+  if (error) { toast('注册失败：'+error.message,'err'); return; }
+
+  currentBetter = { name, passwordHash: hash };
+  updateAuthUI();
+  toast('注册成功！现在可以投注了');
+  // Switch to login mode for future
+  authMode = 'login';
+  document.getElementById('authBtn').textContent = '登录';
+  document.getElementById('authSwitchBtn').textContent = '我要注册';
+  document.getElementById('authPwd2').style.display = 'none';
+  await refreshMatches();
+}
+
+async function loginBetter() {
+  if (authMode !== 'login') { await registerBetter(); return; }
+  const name = document.getElementById('authName').value.trim();
+  const pwd = document.getElementById('authPwd').value.trim();
+  if (!name || !pwd) { toast('请填写姓名和密码','err'); return; }
+
+  const hash = await sha256(pwd);
+  const { data, error } = await db.from('betters').select('*').eq('name', name).single();
+  if (error || !data) { toast('该姓名未注册，请先注册','err'); return; }
+  if (data.password_hash !== hash) { toast('密码错误','err'); return; }
+
+  currentBetter = { name, passwordHash: hash };
+  updateAuthUI();
+  toast('登录成功！你好，'+name);
+  await refreshMatches();
+}
+
+function logoutBetter() {
+  currentBetter = { name: null, passwordHash: null };
+  document.getElementById('authName').value = '';
+  document.getElementById('authPwd').value = '';
+  document.getElementById('authPwd2').value = '';
+  updateAuthUI();
+  refreshMatches();
+}
+
+function updateAuthUI() {
+  const loggedIn = !!currentBetter.name;
+  document.getElementById('authStatus').textContent = loggedIn ? `✅ 你好，${currentBetter.name}` : '👤 请先注册或登录投注身份';
+  document.getElementById('authStatus').className = 'auth-status' + (loggedIn ? ' ready' : '');
+  document.getElementById('authBtn').style.display = loggedIn ? 'none' : '';
+  document.getElementById('authSwitchBtn').style.display = loggedIn ? 'none' : '';
+  document.getElementById('authLogoutBtn').style.display = loggedIn ? '' : 'none';
+  document.getElementById('authName').style.display = loggedIn ? 'none' : '';
+  document.getElementById('authPwd').style.display = loggedIn ? 'none' : '';
+  document.getElementById('authPwd2').style.display = loggedIn ? 'none' : '';
+}
+
+// ========== TABS ==========
+function switchTab(tab) {
+  ['matches','myBets','admin'].forEach((t,i) => {
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('hidden', t!==tab);
+    document.querySelectorAll('.tab-btn')[i].classList.toggle('active', t===tab);
+  });
+  if (tab === 'matches') refreshMatches();
+  if (tab === 'admin') renderAdminLogin();
+  if (tab === 'myBets') {
+    if (currentBetter.name) {
+      document.getElementById('myBetsLoginCard').style.display = 'none';
+      loadMyBetsAuto();
+    } else {
+      document.getElementById('myBetsLoginCard').style.display = '';
+      document.getElementById('myBetsContent').innerHTML = '';
+    }
+  }
+}
+
+// ========== MATCHES ==========
+async function refreshMatches() {
+  const { data: matches, error } = await db.from('matches').select('*').order('match_time', {ascending:true});
+  if (error) { toast('加载比赛失败','err'); return; }
+  renderMatches(matches || []);
+}
+
+async function loadMatchOdds(matchId) {
+  const { data: bets } = await db.from('bets').select('*').eq('match_id', matchId);
+  if (!bets) return { score: null, result: null };
+  return {
+    score: calcPoolOdds(bets.filter(b => b.pool_type === 'score'), 'score'),
+    result: calcPoolOdds(bets.filter(b => b.pool_type === 'result'), 'result')
+  };
+}
+
+function calcPoolOdds(bets, type) {
+  if (bets.length === 0) return { odds: [], total: 0, allSame: false };
+  const total = bets.reduce((s,b) => s + b.amount, 0);
+  const groups = {};
+  bets.forEach(b => {
+    let key;
+    if (type === 'score') key = `${b.guess_score_a}:${b.guess_score_b}`;
+    else key = b.guess_winner;
+    groups[key] = (groups[key] || 0) + b.amount;
+  });
+  const keys = Object.keys(groups);
+  const allSame = keys.length <= 1;
+  const odds = keys.map(k => ({
+    outcome: k,
+    amount: groups[k],
+    odds: total / groups[k],
+    ratio: (groups[k] / total * 100).toFixed(0) + '%'
+  }));
+  odds.sort((a,b) => b.amount - a.amount);
+  return { odds, total, allSame };
+}
+
+async function renderMatches(matches) {
+  const container = document.getElementById('tabMatches');
+  if (!matches.length) { container.innerHTML = '<div class="card"><p style="color:var(--text2)">暂无比赛</p></div>'; return; }
+
+  // collect my bets first
+  const allBets = currentBetter.name ? await fetchMyBetsData() : [];
+
+  const html = await Promise.all(matches.map(async m => {
+    const open = isOpen(m.match_time);
+    const hasResult = m.score_a !== null && m.score_b !== null;
+    const odds = open ? null : await loadMatchOdds(m.id);
+    const myBets = allBets.filter(b => b.match_id === m.id);
+
+    let myBetsHtml = '';
+    if (currentBetter.name && myBets.length > 0) {
+      myBetsHtml = myBets.map(b => {
+        let desc = '';
+        if (b.pool_type === 'score') desc = `比分 ${b.guess_score_a}:${b.guess_score_b}`;
+        else desc = `${b.guess_winner} 晋级`;
+        const st = b.settled ? (b.settlement === 'win' ? '✅' : b.settlement === 'refund' ? '↩️' : '❌') : '⏳';
+        const delBtn = (open && !b.settled) ? ` <button onclick="deleteBet('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem;padding:0 2px" title="删除此投注">✕</button>` : '';
+        return `<span class="my-bet-tag">${st} [${b.pool_type==='score'?'比分池':'胜负池'}] ${desc} ¥${b.amount}${delBtn}</span>`;
+      }).join('');
+    }
+
+    // Odds display
+    let oddsHtml = '';
+    if (odds) {
+      oddsHtml += '<div style="margin-top:8px;font-size:.8rem;color:var(--text2)">📊 封盘赔率（池总额 ÷ 该选项投注额）</div>';
+      oddsHtml += '<div style="font-size:.78rem;color:var(--text2);margin-bottom:4px">赔率仅供参考，实际收付线下结算</div>';
+      if (odds.score && odds.score.odds.length > 0) {
+        const refundNote = odds.score.allSame ? ' <span style="color:var(--gold)">⚠ 全部同注，将退款</span>' : '';
+        oddsHtml += '<div style="font-size:.8rem;margin-top:4px"><b>比分池</b> 总额 ¥'+odds.score.total+refundNote+'</div>';
+        oddsHtml += '<div class="pool-odds">'+odds.score.odds.map(o =>
+          `<span class="odd-item">${o.outcome} <span class="val">${o.odds.toFixed(2)}</span> (${o.ratio})</span>`
+        ).join('')+'</div>';
+      }
+      if (odds.result && odds.result.odds.length > 0) {
+        const refundNote = odds.result.allSame ? ' <span style="color:var(--gold)">⚠ 全部同注，将退款</span>' : '';
+        oddsHtml += '<div style="font-size:.8rem;margin-top:4px"><b>胜负池</b> 总额 ¥'+odds.result.total+refundNote+'</div>';
+        oddsHtml += '<div class="pool-odds">'+odds.result.odds.map(o =>
+          `<span class="odd-item">${o.outcome} <span class="val">${o.odds.toFixed(2)}</span> (${o.ratio})</span>`
+        ).join('')+'</div>';
+      }
+      if ((!odds.score || odds.score.odds.length===0) && (!odds.result || odds.result.odds.length===0)) {
+        oddsHtml += '<div style="font-size:.8rem;color:var(--text2);margin-top:4px">暂无投注</div>';
+      }
+    }
+
+    // Public bets after deadline
+    let publicBetsHtml = '';
+    if (!open) {
+      const { data: allMatchBets } = await db.from('bets').select('*').eq('match_id', m.id).order('created_at', {ascending:true});
+      if (allMatchBets && allMatchBets.length > 0) {
+        const scoreBets = allMatchBets.filter(b => b.pool_type === 'score');
+        const resultBets = allMatchBets.filter(b => b.pool_type === 'result');
+        publicBetsHtml += '<div style="margin-top:8px;font-size:.8rem"><b>👥 投注公示</b></div>';
+        if (scoreBets.length > 0) {
+          publicBetsHtml += '<div style="font-size:.78rem;color:var(--text2);margin-top:2px">🎯 比分池</div>';
+          publicBetsHtml += '<table class="bets-table" style="margin-top:4px"><tr><th>姓名</th><th>比分</th><th>金额</th></tr>';
+          publicBetsHtml += scoreBets.map(b => `<tr><td>${b.better_name}</td><td>${b.guess_score_a}:${b.guess_score_b}</td><td>¥${b.amount}</td></tr>`).join('');
+          publicBetsHtml += '</table>';
+        }
+        if (resultBets.length > 0) {
+          publicBetsHtml += '<div style="font-size:.78rem;color:var(--text2);margin-top:4px">🏆 胜负池</div>';
+          publicBetsHtml += '<table class="bets-table" style="margin-top:4px"><tr><th>姓名</th><th>晋级</th><th>金额</th></tr>';
+          publicBetsHtml += resultBets.map(b => `<tr><td>${b.better_name}</td><td>${b.guess_winner}</td><td>¥${b.amount}</td></tr>`).join('');
+          publicBetsHtml += '</table>';
+        }
+      }
+    }
+
+    // Result display
+    let resultHtml = '';
+    if (hasResult) {
+      resultHtml = `<div style="margin-top:8px;font-size:.85rem;color:var(--gold)">🏁 赛果：${m.score_a}:${m.score_b}（90分钟） | 晋级：${m.winner||'—'}</div>`;
+    }
+
+    return `
+    <div class="card">
+      <div class="card-header">
+        <span class="match-teams">${m.team_a} <span class="vs">VS</span> ${m.team_b}</span>
+        <span class="deadline ${open?'open':'closed'}">${open?'投注中':'已封盘'}</span>
+      </div>
+      <div style="color:var(--text2);font-size:.8rem">🕐 ${fmtTime(m.match_time)} | ⏰ 截止 ${fmtTime(deadlineTime(m.match_time).toISOString())}</div>
+      ${resultHtml}
+      ${oddsHtml}
+      ${publicBetsHtml}
+      ${myBetsHtml}
+
+      ${open ? (currentBetter.name ? `
+      <!-- Score Pool -->
+      <div class="pool-section">
+        <div class="pool-label">🎯 比分池（猜90分钟比分） <span style="font-weight:400;font-size:.75rem;color:var(--text2)">以 ${currentBetter.name} 投注</span></div>
+        <div class="bet-form">
+          <input class="score-input" id="sa_${m.id}" type="number" min="0" max="20" placeholder="${m.team_a}" title="${m.team_a}进球">
+          <span style="color:var(--text2)">:</span>
+          <input class="score-input" id="sb_${m.id}" type="number" min="0" max="20" placeholder="${m.team_b}" title="${m.team_b}进球">
+          <span style="color:var(--text2)">¥</span>
+          <input class="amount-input" id="amt_s_${m.id}" type="number" min="50" max="200" value="50" step="10">
+          <button class="btn btn-gold btn-sm" onclick="placeBet('${m.id}','score')">投注</button>
+        </div>
+      </div>
+      <!-- Result Pool -->
+      <div class="pool-section">
+        <div class="pool-label">🏆 胜负池（猜晋级队伍） <span style="font-weight:400;font-size:.75rem;color:var(--text2)">以 ${currentBetter.name} 投注</span></div>
+        <div class="bet-form">
+          <div class="result-pick" id="rp_${m.id}">
+            <button onclick="pickWinner('${m.id}','${m.team_a}',this)">${m.team_a}</button>
+            <button onclick="pickWinner('${m.id}','${m.team_b}',this)">${m.team_b}</button>
+          </div>
+          <input type="hidden" id="sel_${m.id}" value="">
+          <span style="color:var(--text2)">¥</span>
+          <input class="amount-input" id="amt_r_${m.id}" type="number" min="50" max="200" value="50" step="10">
+          <button class="btn btn-gold btn-sm" onclick="placeBet('${m.id}','result')">投注</button>
+        </div>
+      </div>
+      ` : `
+      <!-- Not logged in -->
+      <div class="pool-section" style="text-align:center;padding:12px">
+        <span style="color:var(--text2);font-size:.85rem">👆 请先在上方注册或登录投注身份，再参与竞猜</span>
+      </div>
+      `) : ''}
+    </div>`;
+  }));
+
+  container.innerHTML = html.join('');
+}
+
+function pickWinner(matchId, team, btn) {
+  document.getElementById('sel_'+matchId).value = team;
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+async function placeBet(matchId, poolType) {
+  if (!currentBetter.name) { toast('请先在上方注册或登录','err'); return; }
+
+  const prefix = poolType === 'score' ? 's' : 'r';
+  const amountStr = document.getElementById('amt_'+prefix+'_'+matchId).value;
+  const amount = parseInt(amountStr);
+  if (isNaN(amount) || amount < 50 || amount > 200) { toast('金额需在 50-200 之间','err'); return; }
+
+  const { data: match } = await db.from('matches').select('match_time').eq('id', matchId).single();
+  if (!match || !isOpen(match.match_time)) { toast('已截止投注','err'); return; }
+
+  // Verify credentials against betters table
+  const { data: better } = await db.from('betters').select('*').eq('name', currentBetter.name).single();
+  if (!better || better.password_hash !== currentBetter.passwordHash) {
+    toast('身份验证失败，请重新登录','err');
+    logoutBetter();
+    return;
+  }
+
+  let betData = { match_id: matchId, pool_type: poolType, better_name: currentBetter.name, password_hash: currentBetter.passwordHash, amount };
+
+  if (poolType === 'score') {
+    const sa = parseInt(document.getElementById('sa_'+matchId).value);
+    const sb = parseInt(document.getElementById('sb_'+matchId).value);
+    if (isNaN(sa) || isNaN(sb) || sa < 0 || sb < 0) { toast('请填写有效比分','err'); return; }
+    betData.guess_score_a = sa;
+    betData.guess_score_b = sb;
+  } else {
+    const winner = document.getElementById('sel_'+matchId).value;
+    if (!winner) { toast('请选择晋级队伍','err'); return; }
+    betData.guess_winner = winner;
+  }
+
+  // Delete existing bet in same pool for this match (replace old bet)
+  const { data: existing } = await db.from('bets').select('id')
+    .eq('match_id', matchId).eq('pool_type', poolType)
+    .eq('better_name', currentBetter.name)
+    .eq('password_hash', currentBetter.passwordHash);
+  if (existing && existing.length > 0) {
+    await db.from('bets').delete().eq('id', existing[0].id);
+  }
+
+  const { error } = await db.from('bets').insert(betData);
+  if (error) { toast('投注失败：'+error.message,'err'); return; }
+
+  const desc = poolType === 'score' ? `${betData.guess_score_a}:${betData.guess_score_b}` : betData.guess_winner;
+  toast(`投注成功！${poolType==='score'?'比分':'胜负'} ${desc} ¥${amount}`);
+  await refreshMatches();
+}
+
+async function deleteBet(betId) {
+  if (!confirm('确定删除这条投注？')) return;
+  const { error } = await db.from('bets').delete().eq('id', betId);
+  if (error) { toast('删除失败','err'); return; }
+  toast('投注已删除');
+  await refreshMatches();
+}
+
+async function fetchMyBetsData() {
+  if (!currentBetter.name || !currentBetter.passwordHash) return [];
+  const { data } = await db.from('bets').select('*')
+    .eq('better_name', currentBetter.name)
+    .eq('password_hash', currentBetter.passwordHash)
+    .order('created_at', {ascending:false});
+  return data || [];
+}
+
+async function loadMyBets() {
+  const name = document.getElementById('myBetsName').value.trim();
+  const pwd = document.getElementById('myBetsPwd').value.trim();
+  if (!name || !pwd) { toast('请填写姓名和密码','err'); return; }
+  const hash = await sha256(pwd);
+  // Verify against betters table
+  const { data: better } = await db.from('betters').select('*').eq('name', name).single();
+  if (!better || better.password_hash !== hash) { toast('姓名或密码错误','err'); return; }
+  currentBetter = { name, passwordHash: hash };
+  updateAuthUI();
+  document.getElementById('myBetsLoginCard').style.display = 'none';
+  await renderMyBetsContent();
+}
+
+async function loadMyBetsAuto() {
+  await renderMyBetsContent();
+}
+
+async function renderMyBetsContent() {
+  const bets = await fetchMyBetsData();
+  const container = document.getElementById('myBetsContent');
+  if (!bets.length) {
+    container.innerHTML = '<div class="card"><p style="color:var(--text2)">暂无投注记录</p></div>';
+    return;
+  }
+  const { data: matches } = await db.from('matches').select('*');
+  const matchMap = {};
+  (matches||[]).forEach(m => matchMap[m.id] = m);
+
+  container.innerHTML = bets.map(b => {
+    const m = matchMap[b.match_id];
+    const matchLabel = m ? `${m.team_a} VS ${m.team_b} (${fmtTime(m.match_time)})` : b.match_id;
+    let guess = b.pool_type === 'score' ? `比分 ${b.guess_score_a}:${b.guess_score_b}` : `${b.guess_winner} 晋级`;
+    let st = b.settled ? (b.settlement==='win'?'✅ 中奖':b.settlement==='refund'?'↩️ 退款':'❌ 未中') : '⏳ 待结算';
+    let stColor = b.settled ? (b.settlement==='win'?'var(--green)':b.settlement==='refund'?'var(--gold)':'var(--red)') : 'var(--text2)';
+    return `<div class="card">
+      <div><b>${matchLabel}</b></div>
+      <div style="font-size:.85rem;color:var(--text2)">${b.pool_type==='score'?'🎯比分池':'🏆胜负池'} | ${guess} | ¥${b.amount}</div>
+      <div style="color:${stColor};font-weight:600">${st}</div>
+    </div>`;
+  }).join('');
+}
+
+// ========== ADMIN ==========
+async function adminLogin() {
+  const pw = document.getElementById('adminPwd').value;
+  if (!pw) return;
+  const hash = await sha256(pw);
+  const { data } = await db.from('room_settings').select('value').eq('key','admin_password_hash').single();
+  if (!data || hash !== data.value) { toast('管理员密码错误','err'); return; }
+  adminVerified = true;
+  await renderAdmin();
+}
+
+function renderAdminLogin() {
+  if (adminVerified) { renderAdmin(); return; }
+  document.getElementById('adminContent').innerHTML = `
+    <div class="card">
+      <p style="color:var(--text2);margin-bottom:8px">输入管理员密码</p>
+      <div style="display:flex;gap:8px">
+        <input id="adminPwd" type="password" placeholder="管理员密码" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.85rem;flex:1;max-width:200px">
+        <button class="btn btn-gold btn-sm" onclick="adminLogin()">验证</button>
+      </div>
+    </div>`;
+}
+
+async function renderAdmin() {
+  const { data: matches } = await db.from('matches').select('*').order('match_time',{ascending:true});
+
+  // Build add match form
+  let html = `
+  <div class="admin-section card">
+    <h3>➕ 添加比赛</h3>
+    <div class="admin-form">
+      <div><label>队伍A</label><input id="newA" placeholder="如：阿根廷"></div>
+      <div><label>队伍B</label><input id="newB" placeholder="如：巴西"></div>
+      <div><label>比赛时间（本地）</label><input id="newTime" type="datetime-local"></div>
+      <div style="align-self:flex-end"><button class="btn btn-gold btn-sm" onclick="addMatch()">添加</button></div>
+    </div>
+  </div>`;
+
+  // Build result entry + settlement per match
+  html += '<div class="admin-section card"><h3>📝 录入赛果 & 结算</h3>';
+  for (const m of (matches||[])) {
+    const hasResult = m.score_a !== null;
+    html += `
+    <div style="border-bottom:1px solid var(--border);padding:12px 0">
+      <div style="font-weight:700;margin-bottom:6px">${m.team_a} VS ${m.team_b} <span style="color:var(--text2);font-weight:400;font-size:.8rem">${fmtTime(m.match_time)}</span></div>
+      ${hasResult ? `
+        <div style="font-size:.85rem;color:var(--gold)">已录入：${m.score_a}:${m.score_b} | 晋级：${m.winner||'—'}</div>
+        <div style="margin-top:6px">
+          <button class="btn btn-outline btn-sm" onclick="settleMatch('${m.id}')">🔄 重新结算</button>
+          <button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="viewMatchBets('${m.id}')">👁 查看投注</button>
+        </div>
+      ` : `
+        <div class="result-row">
+          <span>${m.team_a}</span>
+          <input id="rsa_${m.id}" type="number" min="0" style="width:52px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center" placeholder="进球">
+          <span class="vs">:</span>
+          <input id="rsb_${m.id}" type="number" min="0" style="width:52px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);text-align:center" placeholder="进球">
+          <span style="color:var(--text2);font-size:.8rem">晋级</span>
+          <select id="rw_${m.id}" style="padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+            <option value="">—</option>
+            <option value="${m.team_a}">${m.team_a}</option>
+            <option value="${m.team_b}">${m.team_b}</option>
+          </select>
+          <button class="btn btn-gold btn-sm" onclick="recordResult('${m.id}')">录入并结算</button>
+        </div>
+      `}
+    </div>`;
+  }
+  html += '</div>';
+
+  // All bets summary
+  html += `
+  <div class="admin-section card">
+    <h3>📊 全量投注统计</h3>
+    <button class="btn btn-outline btn-sm" onclick="viewAllBets()">查看全部投注</button>
+    <div id="allBetsTable" style="margin-top:12px"></div>
+  </div>`;
+
+  document.getElementById('adminContent').innerHTML = html;
+}
+
+async function addMatch() {
+  const teamA = document.getElementById('newA').value.trim();
+  const teamB = document.getElementById('newB').value.trim();
+  const timeLocal = document.getElementById('newTime').value;
+  if (!teamA || !teamB || !timeLocal) { toast('请填写完整信息','err'); return; }
+  const matchTime = new Date(timeLocal).toISOString();
+  const { error } = await db.from('matches').insert({team_a:teamA, team_b:teamB, match_time:matchTime});
+  if (error) { toast('添加失败：'+error.message,'err'); return; }
+  toast('比赛已添加');
+  await renderAdmin();
+  await refreshMatches();
+}
+
+async function recordResult(matchId) {
+  const sa = parseInt(document.getElementById('rsa_'+matchId).value);
+  const sb = parseInt(document.getElementById('rsb_'+matchId).value);
+  const winner = document.getElementById('rw_'+matchId).value;
+  if (isNaN(sa) || isNaN(sb)) { toast('请填写比分','err'); return; }
+  if (!winner) { toast('请选择晋级队伍','err'); return; }
+  const { error } = await db.from('matches').update({score_a:sa, score_b:sb, winner}).eq('id', matchId);
+  if (error) { toast('录入失败：'+error.message,'err'); return; }
+  toast('赛果已录入，开始结算...');
+  await settleMatch(matchId);
+  await renderAdmin();
+  await refreshMatches();
+}
+
+async function settleMatch(matchId) {
+  const { data: match } = await db.from('matches').select('*').eq('id', matchId).single();
+  if (!match || match.score_a===null) { toast('请先录入赛果','err'); return; }
+  const { data: bets } = await db.from('bets').select('*').eq('match_id', matchId);
+  if (!bets || bets.length===0) { toast('该场无投注，无需结算'); return; }
+
+  let updated = [];
+  const scoreBets = bets.filter(b => b.pool_type === 'score');
+  const resultBets = bets.filter(b => b.pool_type === 'result');
+
+  // Settle score pool
+  const scoreOutcome = `${match.score_a}:${match.score_b}`;
+  const scoreGroups = groupBy(scoreBets, b => `${b.guess_score_a}:${b.guess_score_b}`);
+  const scoreKeys = Object.keys(scoreGroups);
+  const allSameScore = scoreKeys.length <= 1;
+
+  for (const b of scoreBets) {
+    const guessKey = `${b.guess_score_a}:${b.guess_score_b}`;
+    if (allSameScore) {
+      updated.push({...b, settled: true, settlement: 'refund'});
+    } else if (guessKey === scoreOutcome) {
+      updated.push({...b, settled: true, settlement: 'win'});
+    } else {
+      updated.push({...b, settled: true, settlement: 'loss'});
+    }
+  }
+
+  // If no one guessed right in score pool, refund all
+  const hasScoreWinner = updated.some(b => b.settlement === 'win' && b.pool_type === 'score');
+  if (!hasScoreWinner && scoreBets.length > 0 && !allSameScore) {
+    updated = updated.map(b => b.pool_type === 'score' ? {...b, settlement: 'refund'} : b);
+  }
+
+  // Settle result pool
+  const resultGroups = groupBy(resultBets, b => b.guess_winner);
+  const resultKeys = Object.keys(resultGroups);
+  const allSameResult = resultKeys.length <= 1;
+
+  for (const b of resultBets) {
+    if (allSameResult) {
+      updated.push({...b, settled: true, settlement: 'refund'});
+    } else if (b.guess_winner === match.winner) {
+      updated.push({...b, settled: true, settlement: 'win'});
+    } else {
+      updated.push({...b, settled: true, settlement: 'loss'});
+    }
+  }
+
+  // If no one guessed right in result pool, refund all
+  const hasResultWinner = updated.some(b => b.settlement === 'win' && b.pool_type === 'result');
+  if (!hasResultWinner && resultBets.length > 0 && !allSameResult) {
+    updated = updated.map(b => b.pool_type === 'result' && b.settlement !== 'win' ? {...b, settlement: 'refund'} : b);
+  }
+
+  // Batch update
+  for (const b of updated) {
+    await db.from('bets').update({settled: b.settled, settlement: b.settlement}).eq('id', b.id);
+  }
+
+  const wCount = updated.filter(b => b.settlement === 'win').length;
+  const rCount = updated.filter(b => b.settlement === 'refund').length;
+  const lCount = updated.filter(b => b.settlement === 'loss').length;
+  toast(`结算完成：✅${wCount}人中奖 ↩️${rCount}人退款 ❌${lCount}人未中`);
+}
+
+function groupBy(arr, fn) {
+  const map = {};
+  arr.forEach(item => { const k = fn(item); map[k] = (map[k]||0) + item.amount; });
+  return map;
+}
+
+async function viewMatchBets(matchId) {
+  const { data: match } = await db.from('matches').select('*').eq('id',matchId).single();
+  const { data: bets } = await db.from('bets').select('*').eq('match_id',matchId).order('created_at',{ascending:true});
+  const div = document.getElementById('allBetsTable');
+  if (!bets || bets.length===0) { div.innerHTML = '<p style="color:var(--text2)">暂无投注</p>'; return; }
+  div.innerHTML = `<div style="font-weight:700;margin-bottom:8px">${match.team_a} VS ${match.team_b}</div>
+  <table class="bets-table"><tr><th>姓名</th><th>池</th><th>竞猜</th><th>金额</th><th>结算</th><th>时间</th></tr>
+  ${bets.map(b => {
+    const guess = b.pool_type==='score'?`${b.guess_score_a}:${b.guess_score_b}`:b.guess_winner;
+    const st = b.settled ? (b.settlement==='win'?'✅中':b.settlement==='refund'?'↩退':'❌') : '⏳';
+    return `<tr><td>${b.better_name}</td><td>${b.pool_type==='score'?'比分':'胜负'}</td><td>${guess}</td><td>¥${b.amount}</td><td>${st}</td><td>${fmtTime(b.created_at)}</td></tr>`;
+  }).join('')}</table>`;
+}
+
+async function viewAllBets() {
+  const { data: bets } = await db.from('bets').select('*').order('created_at',{ascending:false}).limit(200);
+  const { data: matches } = await db.from('matches').select('*');
+  const map = {};
+  (matches||[]).forEach(m => map[m.id]=m);
+  const div = document.getElementById('allBetsTable');
+  if (!bets || bets.length===0) { div.innerHTML = '<p style="color:var(--text2)">暂无投注</p>'; return; }
+  div.innerHTML = `<table class="bets-table"><tr><th>比赛</th><th>姓名</th><th>池</th><th>竞猜</th><th>金额</th><th>结算</th><th>时间</th></tr>
+  ${bets.map(b => {
+    const m = map[b.match_id];
+    const ml = m ? `${m.team_a}-${m.team_b}` : '—';
+    const guess = b.pool_type==='score'?`${b.guess_score_a}:${b.guess_score_b}`:b.guess_winner;
+    const st = b.settled ? (b.settlement==='win'?'✅中':b.settlement==='refund'?'↩退':'❌') : '⏳';
+    return `<tr><td>${ml}</td><td>${b.better_name}</td><td>${b.pool_type==='score'?'比分':'胜负'}</td><td>${guess}</td><td>¥${b.amount}</td><td>${st}</td><td>${fmtTime(b.created_at)}</td></tr>`;
+  }).join('')}</table>`;
+}
+</script>
+</body>
+</html>
