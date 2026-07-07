@@ -780,6 +780,10 @@ async function renderAdmin() {
       <div style="align-self:flex-end"><button class="btn btn-gold btn-sm" onclick="createRoom()">创建新房间</button></div>
     </div>
     <div style="font-size:.75rem;color:var(--text2);margin-top:4px">每个房间有独立密码和比赛，把密码发给对应群就行</div>
+    <div style="margin-top:8px">
+      <button class="btn btn-outline btn-sm" onclick="copyMatchesFrom()">📋 从其他房间复制比赛</button>
+      <span style="font-size:.78rem;color:var(--text2);margin-left:8px">把已有房间的比赛全部复制到当前房间</span>
+    </div>
   </div>`;
 
   document.getElementById('adminContent').innerHTML = html;
@@ -802,6 +806,33 @@ async function createRoom() {
   if (error) { toast('创建失败：'+error.message,'err'); return; }
   toast('房间「'+name+'」创建成功！密码：'+pwd);
   await renderAdmin();
+}
+
+async function copyMatchesFrom() {
+  const { data: rooms } = await db.from('rooms').select('*');
+  const otherRooms = (rooms||[]).filter(r => r.id !== currentRoom.id);
+  if (otherRooms.length === 0) { toast('没有其他房间可复制','err'); return; }
+
+  // Build a simple prompt with room names
+  let msg = '选择要复制比赛来源的房间：';
+  const choices = otherRooms.map((r, i) => `${i+1}. ${r.name}`);
+  const choice = prompt(msg + '\n' + choices.join('\n') + '\n\n输入数字：');
+  if (!choice) return;
+  const idx = parseInt(choice) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= otherRooms.length) { toast('无效选择','err'); return; }
+
+  const sourceRoom = otherRooms[idx];
+  const { data: matches } = await db.from('matches').select('team_a,team_b,match_time').eq('room_id', sourceRoom.id);
+  if (!matches || matches.length === 0) { toast('该房间没有比赛','err'); return; }
+
+  const insertData = matches.map(m => ({
+    team_a: m.team_a, team_b: m.team_b, match_time: m.match_time, room_id: currentRoom.id
+  }));
+  const { error } = await db.from('matches').insert(insertData);
+  if (error) { toast('复制失败：'+error.message,'err'); return; }
+  toast(`已从「${sourceRoom.name}」复制 ${matches.length} 场比赛`);
+  await renderAdmin();
+  await refreshMatches();
 }
 
 async function addMatch() {
