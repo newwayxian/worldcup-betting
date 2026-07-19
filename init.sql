@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS matches (
   score_a INTEGER,
   score_b INTEGER,
   winner TEXT,
+  hidden BOOLEAN DEFAULT false,
+  custom_deadline TIMESTAMPTZ,
   room_id UUID REFERENCES rooms(id),
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -73,6 +75,23 @@ ON CONFLICT DO NOTHING;
 -- 管理员密码: Nadmin888
 INSERT INTO room_settings (key, value) VALUES ('admin_password_hash', 'ba7fa7c4a4f0a180a3a0b704c63942168c8404a461b7a644b0232face426ced6')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- 4.5 防作弊触发器：封盘后 custom_deadline 不可再修改
+CREATE OR REPLACE FUNCTION check_deadline_lock() RETURNS trigger AS $$
+BEGIN
+  IF NEW.custom_deadline IS DISTINCT FROM OLD.custom_deadline THEN
+    IF now() >= COALESCE(OLD.custom_deadline, OLD.match_time - interval '3 hours') THEN
+      RAISE EXCEPTION '该场已封盘，封盘时间不可再修改';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS deadline_lock ON matches;
+CREATE TRIGGER deadline_lock
+  BEFORE UPDATE ON matches
+  FOR EACH ROW EXECUTE FUNCTION check_deadline_lock();
 
 -- 5. 预置比赛数据（时间均为北京时间 UTC+8，转换为 UTC 存储）
 INSERT INTO matches (team_a, team_b, match_time, room_id) VALUES

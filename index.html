@@ -178,7 +178,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       <span>🎯 <b>比分池</b>：猜90分钟比分</span>
       <span>🏆 <b>胜负池</b>：猜晋级队伍</span>
       <span>💰 每注 ¥50-200</span>
-      <span>⏰ 赛前3小时截止</span>
+      <span>⏰ 默认赛前3小时截止，以每场显示为准</span>
       <span>🔒 只能看自己投注</span>
       <span>↩️ 无人猜对/无对手盘→退款</span>
     </div>
@@ -239,14 +239,15 @@ function fmtTime(iso) {
   return d.toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
 }
 
-function deadlineTime(matchTime) {
-  const d = new Date(matchTime);
+function deadlineTime(m) {
+  if (m.custom_deadline) return new Date(m.custom_deadline);
+  const d = new Date(m.match_time);
   d.setHours(d.getHours() - 3);
   return d;
 }
 
-function isOpen(matchTime) {
-  return new Date() < deadlineTime(matchTime);
+function isOpen(m) {
+  return new Date() < deadlineTime(m);
 }
 
 function toast(msg, type='ok') {
@@ -401,7 +402,7 @@ async function refreshMatches() {
   if (currentRoom.id) q = q.eq('room_id', currentRoom.id);
   const { data: matches, error } = await q;
   if (error) { toast('加载比赛失败','err'); return; }
-  renderMatches(matches || []);
+  renderMatches((matches || []).filter(m => !m.hidden));
 }
 
 async function loadMatchOdds(matchId) {
@@ -445,7 +446,7 @@ async function renderMatches(matches) {
   const allBets = currentBetter.name ? await fetchMyBetsData() : [];
 
   const html = await Promise.all(matches.map(async m => {
-    const open = isOpen(m.match_time);
+    const open = isOpen(m);
     const hasResult = m.score_a !== null && m.score_b !== null;
     const odds = open ? null : await loadMatchOdds(m.id);
     const myBets = allBets.filter(b => b.match_id === m.id);
@@ -523,7 +524,7 @@ async function renderMatches(matches) {
         <span class="match-teams">${m.team_a} <span class="vs">VS</span> ${m.team_b}</span>
         <span class="deadline ${open?'open':'closed'}">${open?'投注中':'已封盘'}</span>
       </div>
-      <div style="color:var(--text2);font-size:.8rem">🕐 ${fmtTime(m.match_time)} | ⏰ 截止 ${fmtTime(deadlineTime(m.match_time).toISOString())}</div>
+      <div style="color:var(--text2);font-size:.8rem">🕐 ${fmtTime(m.match_time)} | ⏰ 截止 ${fmtTime(deadlineTime(m).toISOString())}${m.custom_deadline?' <span style="color:var(--gold)">(管理员调整)</span>':''}</div>
       ${resultHtml}
       ${oddsHtml}
       ${publicBetsHtml}
@@ -582,8 +583,8 @@ async function placeBet(matchId, poolType) {
   const amount = parseInt(amountStr);
   if (isNaN(amount) || amount < 50 || amount > 200) { toast('金额需在 50-200 之间','err'); return; }
 
-  const { data: match } = await db.from('matches').select('match_time').eq('id', matchId).single();
-  if (!match || !isOpen(match.match_time)) { toast('已截止投注','err'); return; }
+  const { data: match } = await db.from('matches').select('match_time,custom_deadline').eq('id', matchId).single();
+  if (!match || !isOpen(match)) { toast('已截止投注','err'); return; }
 
   // Verify credentials against betters table
   const { data: better } = await db.from('betters').select('*').eq('name', currentBetter.name).maybeSingle();
@@ -733,9 +734,21 @@ async function renderAdmin() {
   html += '<div class="admin-section card"><h3>📝 录入赛果 & 结算</h3>';
   for (const m of (matches||[])) {
     const hasResult = m.score_a !== null;
+    const sealed = !isOpen(m);
+    const dl = deadlineTime(m);
+    const dlLocal = new Date(dl.getTime() - dl.getTimezoneOffset()*60000).toISOString().slice(0,16);
     html += `
-    <div style="border-bottom:1px solid var(--border);padding:12px 0">
-      <div style="font-weight:700;margin-bottom:6px">${m.team_a} VS ${m.team_b} <span style="color:var(--text2);font-weight:400;font-size:.8rem">${fmtTime(m.match_time)}</span></div>
+    <div style="border-bottom:1px solid var(--border);padding:12px 0;${m.hidden?'opacity:.55':''}">
+      <div style="font-weight:700;margin-bottom:6px">${m.team_a} VS ${m.team_b} <span style="color:var(--text2);font-weight:400;font-size:.8rem">${fmtTime(m.match_time)}</span>${m.hidden?' <span style="color:var(--red);font-size:.75rem">🙈 已隐藏</span>':''}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:.8rem">
+        <button class="btn btn-outline btn-sm" onclick="toggleHidden('${m.id}', ${!m.hidden})">${m.hidden?'👁 恢复显示':'🙈 隐藏比赛'}</button>
+        <span style="color:var(--text2)">⏰ 封盘 ${fmtTime(dl.toISOString())}${m.custom_deadline?' <span style="color:var(--gold)">(自定义)</span>':' (默认开球前3h)'}</span>
+        ${sealed ? '<span style="color:var(--red);font-size:.78rem">🔒 已封盘，不可修改</span>' : `
+          <input id="dl_${m.id}" type="datetime-local" value="${dlLocal}" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.8rem">
+          <button class="btn btn-outline btn-sm" onclick="updateDeadline('${m.id}')">修改封盘</button>
+          ${m.custom_deadline ? `<button class="btn btn-outline btn-sm" onclick="clearDeadline('${m.id}')">恢复默认</button>` : ''}
+        `}
+      </div>
       ${hasResult ? `
         <div style="font-size:.85rem;color:var(--gold)">已录入：${m.score_a}:${m.score_b} | 晋级：${m.winner||'—'}</div>
         <div style="margin-top:6px">
@@ -806,6 +819,33 @@ async function createRoom() {
   if (error) { toast('创建失败：'+error.message,'err'); return; }
   toast('房间「'+name+'」创建成功！密码：'+pwd);
   await renderAdmin();
+}
+
+async function toggleHidden(matchId, hidden) {
+  const { error } = await db.from('matches').update({hidden}).eq('id', matchId);
+  if (error) { toast('操作失败：'+error.message,'err'); return; }
+  toast(hidden ? '比赛已隐藏' : '比赛已恢复显示');
+  await renderAdmin();
+  await refreshMatches();
+}
+
+async function updateDeadline(matchId) {
+  const val = document.getElementById('dl_'+matchId).value;
+  if (!val) { toast('请选择封盘时间','err'); return; }
+  const iso = new Date(val).toISOString();
+  const { error } = await db.from('matches').update({custom_deadline: iso}).eq('id', matchId);
+  if (error) { toast('修改失败：'+error.message,'err'); await renderAdmin(); return; }
+  toast('封盘时间已修改为 ' + fmtTime(iso));
+  await renderAdmin();
+  await refreshMatches();
+}
+
+async function clearDeadline(matchId) {
+  const { error } = await db.from('matches').update({custom_deadline: null}).eq('id', matchId);
+  if (error) { toast('操作失败：'+error.message,'err'); await renderAdmin(); return; }
+  toast('已恢复默认封盘时间（开球前3小时）');
+  await renderAdmin();
+  await refreshMatches();
 }
 
 async function copyMatchesFrom() {
